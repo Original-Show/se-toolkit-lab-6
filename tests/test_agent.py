@@ -16,11 +16,11 @@ from pathlib import Path
 
 def run_agent(question: str) -> tuple[int, dict, str]:
     """Run agent.py with a question and return exit code, output, stderr."""
-    project_root = Path(__file__).parent.parent
+    project_root = Path("/home/yaroslav/Documents/prog/software-engineering-toolkit/se-toolkit-lab-6")
     agent_path = project_root / "agent.py"
 
     result = subprocess.run(
-        [sys.executable, "-m", "uv", "run", str(agent_path), question],
+        [sys.executable, str(agent_path), question],
         capture_output=True,
         text=True,
         cwd=project_root,
@@ -96,7 +96,7 @@ def test_tool_calls_structure():
 
 def test_path_security_traversal():
     """Test that path traversal is blocked (security test)."""
-    project_root = Path(__file__).parent.parent
+    project_root = Path("/home/yaroslav/Documents/prog/software-engineering-toolkit/se-toolkit-lab-6")
     sys.path.insert(0, str(project_root))
 
     from agent import read_file_tool, list_files_tool
@@ -149,6 +149,63 @@ def test_database_items_question():
     # Should use query_api to fetch live data
     tool_names = [tc.get("tool") for tc in output["tool_calls"]]
     assert "query_api" in tool_names, "Expected query_api tool to be called for database question"
+
+    assert isinstance(output["answer"], str), "'answer' must be a string"
+    assert len(output["answer"]) > 0, "'answer' must not be empty"
+
+def test_unauthenticated_status_code_question():
+    """Test agent with unauthenticated status code question - should use query_api with auth: false."""
+    returncode, output, stderr = run_agent(
+        "What HTTP status code does the API return when you request /items/ without authentication?"
+    )
+
+    assert returncode == 0, f"agent.py failed with: {stderr}"
+
+    assert "answer" in output, "Missing 'answer' field"
+    assert "tool_calls" in output, "Missing 'tool_calls' field"
+    assert isinstance(output["tool_calls"], list), "'tool_calls' must be a list"
+
+    # Should use query_api to check status code
+    tool_names = [tc.get("tool") for tc in output["tool_calls"]]
+    assert "query_api" in tool_names, "Expected query_api tool to be called for status code question"
+
+    # Check that auth: false was used for unauthenticated request
+    tool_calls = output.get("tool_calls", [])
+    auth_false_used = any(
+        tc.get("tool") == "query_api" and tc.get("args", {}).get("auth") is False
+        for tc in tool_calls
+    )
+    assert auth_false_used, "Expected query_api to be called with auth: false for unauthenticated request"
+
+    # Answer should mention 401 or 403
+    answer = output.get("answer", "").lower()
+    assert "401" in answer or "403" in answer or "unauthorized" in answer, \
+        f"Expected answer to mention 401/403 status code, got: {output.get('answer', '')}"
+
+    assert isinstance(output["answer"], str), "'answer' must be a string"
+    assert len(output["answer"]) > 0, "'answer' must not be empty"
+
+
+def test_bug_diagnosis_question():
+    """Test agent with bug diagnosis question - should use query_api and read_file."""
+    returncode, output, stderr = run_agent(
+        "Query the /analytics/completion-rate endpoint for a lab that has no data (e.g., lab-99). What error do you get?"
+    )
+
+    assert returncode == 0, f"agent.py failed with: {stderr}"
+
+    assert "answer" in output, "Missing 'answer' field"
+    assert "tool_calls" in output, "Missing 'tool_calls' field"
+    assert isinstance(output["tool_calls"], list), "'tool_calls' must be a list"
+
+    # Should use both query_api and read_file for bug diagnosis
+    tool_names = [tc.get("tool") for tc in output["tool_calls"]]
+    assert "query_api" in tool_names, "Expected query_api tool to be called for bug diagnosis"
+
+    # Answer should mention the error (ZeroDivisionError or division by zero)
+    answer = output.get("answer", "").lower()
+    assert "zero" in answer or "division" in answer or "error" in answer, \
+        f"Expected answer to mention ZeroDivisionError, got: {output.get('answer', '')}"
 
     assert isinstance(output["answer"], str), "'answer' must be a string"
     assert len(output["answer"]) > 0, "'answer' must not be empty"

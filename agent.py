@@ -94,6 +94,10 @@ TOOLS = [
                     "body": {
                         "type": "string",
                         "description": "Optional JSON request body (for POST/PUT)"
+                    },
+                    "auth": {
+                        "type": "boolean",
+                        "description": "Whether to include authentication (default: true). Set to false to test unauthenticated access."
                     }
                 },
                 "required": ["method", "path"]
@@ -106,38 +110,36 @@ TOOLS = [
 SYSTEM_PROMPT = """You are a documentation and system assistant that helps users find information.
 
 You have access to three tools:
-1. `list_files` - List files and directories in a given path (use to discover structure)
-2. `read_file` - Read the contents of a file (use for documentation, code, config)
-3. `query_api` - Make HTTP requests to the backend API (use for live data, status codes, errors)
+1. `list_files` - List files and directories in a given path
+2. `read_file` - Read the contents of a file
+3. `query_api` - Make HTTP requests to the backend API
 
-## When to use each tool:
+## Project Structure:
+- Routers are at: backend/app/routers/
+- Main app: backend/app/main.py
+- Dependencies: pyproject.toml
+- Wiki: wiki/*.md
 
-### Use `list_files` when:
-- User asks about available documentation or files
-- You need to discover directory structure
-- Questions like "what files are in..." or "list all..."
+## Tool Selection:
+- Use `list_files` to discover structure (max 2 calls total)
+- Use `read_file` for documentation, code, config files
+- Use `query_api` for live data, status codes, errors
+  - Set `auth: false` to test unauthenticated access (e.g., "without auth header")
 
-### Use `read_file` when:
-- User asks about concepts, processes, how-to guides
-- Questions about git, docker, API design, architecture
-- You need to find static information in wiki, code, or config files
-- Questions about "how to", "steps to", "what is"
+## Critical Rules:
+1. NEVER call list_files more than 2 times
+2. ALWAYS include "Source: <file-path>" at the end of answers from files
+3. ALWAYS provide a COMPLETE final answer - never say "let me continue"
+4. SUMMARIZE in your own words - don't copy file content
 
-### Use `query_api` when:
-- User asks about current system state (how many items, what score)
-- Questions about HTTP status codes (what status code for...)
-- Questions about runtime behavior (errors, crashes, exceptions)
-- You need to fetch live data from the backend
-- Questions like "how many...", "what is the...", "show me..."
+## Examples:
+- For router questions: read backend/app/routers/__init__.py for module names
+- For framework questions: read pyproject.toml
+- For wiki questions: find relevant .md file and read it
+- For bug questions: query the endpoint to see the error, then read the source code at the error line
+- For top-learners bug: try lab-01 which has data that triggers the sorting bug
 
-## Guidelines:
-1. First explore with `list_files` if you don't know where to look
-2. Then use `read_file` to read relevant files
-3. Use `query_api` for live data or to test API endpoints
-4. Include a source reference when you find information in files
-5. For API queries, mention the endpoint and status code in your answer
-
-When you have the answer, respond with the final message containing the answer.
+Respond with the FINAL answer and source.
 """
 
 MAX_TOOL_CALLS = 10
@@ -210,9 +212,10 @@ def query_api_tool(
     method: str,
     path: str,
     body: str | None = None,
+    auth: bool = True,
     settings: AgentSettings | None = None,
 ) -> str:
-    """Make HTTP request to backend API with authentication."""
+    """Make HTTP request to backend API with optional authentication."""
     if settings is None:
         settings = AgentSettings()
 
@@ -223,8 +226,8 @@ def query_api_tool(
         "Content-Type": "application/json",
     }
 
-    # Add authentication if LMS_API_KEY is available
-    if settings.lms_api_key:
+    # Add authentication if LMS_API_KEY is available and auth is True
+    if auth and settings.lms_api_key:
         headers["Authorization"] = f"Bearer {settings.lms_api_key}"
 
     try:
@@ -271,6 +274,7 @@ def execute_tool(
             args.get("method", "GET"),
             args.get("path", ""),
             args.get("body"),
+            args.get("auth", True),
             settings,
         )
     else:
