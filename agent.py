@@ -10,7 +10,6 @@ Output:
 """
 
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -99,15 +98,12 @@ def get_project_root() -> Path:
 
 def is_safe_path(path: str) -> bool:
     """Check if path is safe (no directory traversal)."""
-    # Block path traversal attempts
     if ".." in path or path.startswith("/"):
         return False
 
     project_root = get_project_root()
     try:
-        # Resolve the full path
         resolved = (project_root / path).resolve()
-        # Ensure it's within project root
         return str(resolved).startswith(str(project_root))
     except (ValueError, OSError):
         return False
@@ -195,14 +191,10 @@ def call_llm(
 
 def extract_source_from_answer(answer: str) -> str:
     """Extract source reference from answer text."""
-    # Look for source pattern like "Source: wiki/file.md" or "wiki/file.md#section"
-
-    # Pattern 1: "Source: path" or "source: path"
     match = re.search(r"[Ss]ource:\s*(\S+)", answer)
     if match:
         return match.group(1)
 
-    # Pattern 2: wiki path with optional anchor
     match = re.search(r"(wiki/[\w\-/]+\.md(?:#[\w\-]+)?)", answer)
     if match:
         return match.group(1)
@@ -224,11 +216,9 @@ def run_agent(question: str, settings: AgentSettings) -> dict[str, Any]:
         response = call_llm(messages, settings, tools=TOOLS)
         message = response["choices"][0]["message"]
 
-        # Check if there are tool calls
         tool_calls = message.get("tool_calls", [])
 
         if not tool_calls:
-            # No more tool calls - extract answer
             answer = message.get("content", "")
             source = extract_source_from_answer(answer)
 
@@ -238,7 +228,6 @@ def run_agent(question: str, settings: AgentSettings) -> dict[str, Any]:
                 "tool_calls": tool_calls_history,
             }
 
-        # Process tool calls
         messages.append(message)
 
         for tool_call in tool_calls:
@@ -247,17 +236,14 @@ def run_agent(question: str, settings: AgentSettings) -> dict[str, Any]:
             tool_name = function["name"]
             tool_args = json.loads(function["arguments"])
 
-            # Execute the tool
             result = execute_tool(tool_name, tool_args)
 
-            # Record in history
             tool_calls_history.append({
                 "tool": tool_name,
                 "args": tool_args,
                 "result": result,
             })
 
-            # Add tool result to messages
             messages.append({
                 "role": "tool",
                 "content": result,
@@ -266,7 +252,6 @@ def run_agent(question: str, settings: AgentSettings) -> dict[str, Any]:
 
             tool_call_count += 1
 
-    # Max iterations reached
     return {
         "answer": "I was unable to find the answer within the maximum number of tool calls.",
         "source": "",
