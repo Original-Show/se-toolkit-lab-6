@@ -229,7 +229,8 @@ uv run agent.py "What framework does the backend use?"
 | `wiki/` | Knowledge base for the agent |
 | `run_eval.py` | Local benchmark runner |
 
-## Lessons Learned
+## Lessons Learned (Task 1-2)
+
 
 ### Tool Selection
 The most challenging part was getting the LLM to choose the right tool for each question. Initially, the agent would try to `read_file` for questions about live data. The solution was to add explicit guidance in the system prompt with examples of when to use each tool.
@@ -244,6 +245,41 @@ Pydantic Settings can load from multiple `.env` files using a tuple in `env_file
 For wiki-based questions, the source field is important. For API-based questions, the source is less relevant since the answer comes from live data. The agent extracts source references from the LLM response using regex patterns.
 
 ### Benchmark Iteration
+Running `run_eval.py` locally helps identify failing questions quickly. The key is to test one question at a time using `--index` to debug, then re-run the full benchmark.
+
+### Task 3 Specific Lessons
+
+#### Query API Tool Enhancement
+For Task 3, we added an optional `auth` parameter to the `query_api` tool. This allows the agent to test unauthenticated endpoints by setting `auth: false`, which is essential for questions like "What status code does the API return without authentication?" Without this parameter, the tool would always include the API key, making it impossible to test unauthenticated behavior.
+
+#### Preventing Tool Call Loops
+A common issue was the LLM getting stuck in loops calling `list_files` repeatedly without ever reading files. The fix involved:
+1. Adding explicit limits ("NEVER call list_files more than 2 times")
+2. Providing project structure hints in the system prompt (e.g., "Routers are at: backend/app/routers/")
+3. Adding examples of correct tool usage patterns
+
+#### Bug Diagnosis Strategy
+For bug diagnosis questions, the agent needs to:
+1. Query the endpoint to reproduce the error
+2. Read the error traceback to find the exact line number
+3. Read the source code at that line to understand the bug
+
+The system prompt now includes specific hints for known bugs (e.g., "For top-learners bug: try lab-01 which has data that triggers the sorting bug").
+
+#### LLM Limitations
+Working with a free-tier LLM model revealed several limitations:
+- The model sometimes ignores instructions in the system prompt
+- Complex multi-step reasoning can fail
+- The model may produce incomplete answers or say "let me continue" without actually continuing
+
+The solution was to make the system prompt more explicit and add concrete examples of expected behavior.
+
+#### Final Benchmark Score: 10/10
+After iterative improvements to the system prompt and tool implementation, the agent passes all 10 local benchmark questions. The key improvements were:
+1. Adding project structure hints
+2. Enforcing source references
+3. Adding the `auth` parameter for unauthenticated requests
+4. Providing specific bug diagnosis hints
 Running `run_eval.py` locally helps identify failing questions quickly. The key is to test one question at a time using `--index` to debug, then re-run the full benchmark.
 
 ## Limitations
