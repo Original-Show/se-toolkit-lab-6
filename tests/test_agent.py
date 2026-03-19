@@ -112,3 +112,43 @@ def test_path_security_traversal():
 
     result = list_files_tool("/etc")
     assert "Error" in result, "Should block absolute paths in list_files"
+
+
+def test_backend_framework_question():
+    """Test agent with backend framework question - should use read_file."""
+    returncode, output, stderr = run_agent(
+        "What Python web framework does the backend use?"
+    )
+
+    assert returncode == 0, f"agent.py failed with: {stderr}"
+
+    assert "answer" in output, "Missing 'answer' field"
+    assert "tool_calls" in output, "Missing 'tool_calls' field"
+    assert isinstance(output["tool_calls"], list), "'tool_calls' must be a list"
+
+    # Should use read_file to find framework info in pyproject.toml or backend files
+    tool_names = [tc.get("tool") for tc in output["tool_calls"]]
+    assert "read_file" in tool_names, "Expected read_file tool to be called for framework question"
+
+    assert isinstance(output["answer"], str), "'answer' must be a string"
+    assert len(output["answer"]) > 0, "'answer' must not be empty"
+
+
+def test_database_items_question():
+    """Test agent with database items question - should use query_api."""
+    returncode, output, stderr = run_agent(
+        "How many items are in the database?"
+    )
+
+    assert returncode == 0, f"agent.py failed with: {stderr}"
+
+    assert "answer" in output, "Missing 'answer' field"
+    assert "tool_calls" in output, "Missing 'tool_calls' field"
+    assert isinstance(output["tool_calls"], list), "'tool_calls' must be a list"
+
+    # Should use query_api to fetch live data
+    tool_names = [tc.get("tool") for tc in output["tool_calls"]]
+    assert "query_api" in tool_names, "Expected query_api tool to be called for database question"
+
+    assert isinstance(output["answer"], str), "'answer' must be a string"
+    assert len(output["answer"]) > 0, "'answer' must not be empty"
